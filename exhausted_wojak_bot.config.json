@@ -1,0 +1,12 @@
+{
+	"TELEGRAM_BOT_TOKEN": "000000000:AAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+	"ADMIN_TELEGRAM_DATA": {
+		"id": 123456789,
+		"username": "admin_nickname"
+	},
+	"PICTURE_URL": "https://serguun42.ru/resources/exhausted_wojak.jpeg",
+	"PICTURE_WIDTH": 1280,
+	"PICTURE_HEIGHT": 1143,
+	"THUMB_URL": "https://serguun42.ru/resources/exhausted_wojak.thumb.jpeg",
+	"WELCOME_MESSAGE": "Inline bot. Sends picture of exhausted wojak with your message."
+}
