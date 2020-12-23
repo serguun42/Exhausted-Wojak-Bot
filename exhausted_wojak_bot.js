@@ -13,13 +13,16 @@ const
 
 
 /**
+ * @typedef {Object} Picture
+ * @property {String} url
+ * @property {String} thumb
+ * @property {Number} width
+ * @property {Number} height
+ * 
  * @typedef {Object} ConfigFile
  * @property {String} TELEGRAM_BOT_TOKEN
  * @property {{id: number, username: string}} ADMIN_TELEGRAM_DATA
- * @property {String} PICTURE_URL
- * @property {Number} PICTURE_WIDTH
- * @property {Number} PICTURE_HEIGHT
- * @property {String} THUMB_URL
+ * @property {Picture[]} PICTURES
  * @property {String} WELCOME_MESSAGE
  */
 /** @type {ConfigFile} */
@@ -28,10 +31,7 @@ const
 	{
 		TELEGRAM_BOT_TOKEN,
 		ADMIN_TELEGRAM_DATA,
-		PICTURE_URL,
-		PICTURE_WIDTH,
-		PICTURE_HEIGHT,
-		THUMB_URL,
+		PICTURES,
 		WELCOME_MESSAGE
 	} = CONFIG;
 
@@ -148,7 +148,7 @@ TOB.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
 		if (!text) return false;
 
 		if (text.trim() === "/help" || text.trim() === "/start") {
-			ctx.reply(TGE(WELCOME_MESSAGE), {
+			ctx.reply(WELCOME_MESSAGE, {
 				disable_web_page_preview: true,
 				parse_mode: "HTML"
 			}).then(L).catch(L);
@@ -159,37 +159,27 @@ TOB.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
 TOB.on("inline_query", ({ inlineQuery, answerInlineQuery }) => {
 	const
 		userMessage = inlineQuery.query,
-		answer = {
-			type: "photo",
-			photo_url: PICTURE_URL,
-			photo_width: PICTURE_WIDTH,
-			photo_height: PICTURE_HEIGHT,
-			thumb_url: THUMB_URL,
-			title: TGE(userMessage),
-			caption: TGE(userMessage),
-			parse_mode: "HTML"
-		};
+		executed = /^\d+/.exec(userMessage),
+		caption = userMessage.replace(/^(\\|\d+)/, ""),
+		selectedPicture = PICTURES[executed ? (parseInt(executed) - 1 || 0) : 0] || PICTURES[0];
 
+	L(selectedPicture);
+
+	const answer = {
+		type: "photo",
+		id: `exhausted_wojak_${inlineQuery.from.usernname || inlineQuery.from.id}_${Date.now()}`.slice(0, 64),
+		photo_url: selectedPicture.url,
+		photo_width: selectedPicture.width,
+		photo_height: selectedPicture.height,
+		thumb_url: selectedPicture.thumb,
+		title: TGE(caption),
+		caption: TGE(caption),
+		parse_mode: "HTML"
+	};
 
 	L(answer);
 
-
-	if (!userMessage) {
-		return answerInlineQuery([
-			{
-				...answer,
-				id: "exhausted_wojak_empty"
-			}
-		]).then(L).catch(L);
-	};
-
-
-	return answerInlineQuery([
-		{
-			...answer,
-			id: `exhausted_wojak_${inlineQuery.from.usernname || inlineQuery.from.id}_${Date.now()}`.slice(0, 64),
-		}
-	]).then(L).catch(L);
+	return answerInlineQuery([answer]).then(L).catch(L);
 });
 
 TOB.launch();
