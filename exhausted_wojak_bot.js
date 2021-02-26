@@ -1,15 +1,7 @@
 const
 	fs = require("fs"),
 	DEV = require("os").platform() === "win32" || process.argv[2] === "DEV",
-	L = function(arg) {
-		if (DEV) {
-			console.log(...arguments);
-			if (typeof arg == "object") fs.writeFileSync("./out/errors.json", JSON.stringify(arg, false, "\t"));
-		};
-	},
-	Telegraf = require("telegraf"),
-	Sessions = require("telegraf/session"),
-	Telegram = require("telegraf/telegram");
+	Telegraf = require("telegraf");
 
 
 /**
@@ -37,69 +29,28 @@ const
 
 
 
-const
-	telegram = new Telegram(TELEGRAM_BOT_TOKEN),
-	TOB = new Telegraf(TELEGRAM_BOT_TOKEN);
+/** @type {import("telegraf").Telegraf} */
+const BOT = new Telegraf.Telegraf(TELEGRAM_BOT_TOKEN);
+const telegram = BOT.telegram;
 
 
 
 /**
- * @typedef {Object} TelegramFromObject
- * @property {Number} id
- * @property {String} first_name
- * @property {String} username
- * @property {Boolean} is_bot
- * @property {String} language_code
- * 
- * @typedef {Object} TelegramChatObject
- * @property {Number} id
- * @property {String} title
- * @property {String} type
- * 
- * @typedef {Object} TelegramPhotoObj
- * @property {String} file_id
- * @property {String} file_unique_id
- * @property {Number} file_size
- * @property {Number} width
- * @property {Number} height
- * 
- * @typedef {Object} TelegramMessageObject
- * @property {Number} message_id
- * @property {String} text
- * @property {TelegramFromObject} from
- * @property {TelegramChatObject} chat
- * @property {Number} date
- * @property {Array.<{offset: Number, length: Number, type: String}>} [entities]
- * @property {TelegramPhotoObj[]} [photo]
- * @property {TelegramMessageObject} [reply_to_message]
- * @property {{inline_keyboard: Array.<Array.<{text: string, callback_data: string, url: string}>>}} [reply_markup]
- * @property {String} [caption]
- * 
- * @typedef {Object} TelegramUpdateObject
- * @property {Number} update_id
- * @property {TelegramMessageObject} message
- * 
- * @typedef {Object} TelegramContext
- * @property {Object} telegram 
- * @property {String} updateType 
- * @property {Object} [updateSubTypes] 
- * @property {TelegramMessageObject} [message] 
- * @property {Object} [editedMessage] 
- * @property {Object} [inlineQuery] 
- * @property {Object} [chosenInlineResult] 
- * @property {Object} [callbackQuery] 
- * @property {Object} [shippingQuery] 
- * @property {Object} [preCheckoutQuery] 
- * @property {Object} [channelPost] 
- * @property {Object} [editedChannelPost] 
- * @property {Object} [poll] 
- * @property {Object} [pollAnswer] 
- * @property {TelegramChatObject} [chat] 
- * @property {TelegramFromObject} [from] 
- * @property {Object} [match] 
- * @property {TelegramUpdateObject} [update] 
- * @property {Boolean} webhookReply
+ * @param  {Error[] | String[]} args
+ * @returns {void}
  */
+const LogMessageOrError = (...args) => {
+	const containsAnyError = (args.findIndex((message) => message instanceof Error) > -1),
+		  out = (containsAnyError ? console.error : console.log);
+
+	out(new Date());
+	args.forEach((message) => out(message));
+	out("~~~~~~~~~~~\n\n");
+
+
+	if (DEV) fs.writeFile("./out/logmessageorerror.json", JSON.stringify([...args], false, "\t"), () => {});
+};
+
 /**
  * @param {String} iStr
  * @returns {String}
@@ -125,7 +76,7 @@ const TelegramSendToAdmin = (message) => {
 	telegram.sendMessage(ADMIN_TELEGRAM_DATA.id, message, {
 		parse_mode: "HTML",
 		disable_notification: true
-	}).then(L).catch(L);
+	}).catch(LogMessageOrError);
 };
 
 if (!DEV)
@@ -133,41 +84,30 @@ if (!DEV)
 
 
 
-TOB.use(Sessions());
+BOT.on("text", (ctx) => {
+	const text = ctx?.message?.text;
+	if (!text) return false;
 
-TOB.on("text", /** @param {TelegramContext} ctx */ (ctx) => {
-	const { chat } = ctx;
-	if (!chat) return L({ message: "No chat", ctx });
+	if (ctx?.chat?.type !== "private" && text.indexOf("@exhausted_wojak_bot") < 0) return;
 
-
-	if (chat["type"] === "private") {
-		const { message } = ctx;
-		if (!message) return false;
-
-		const { text } = message;
-		if (!text) return false;
-
-		if (text.trim() === "/help" || text.trim() === "/start") {
-			ctx.reply(WELCOME_MESSAGE, {
-				disable_web_page_preview: true,
-				parse_mode: "HTML"
-			}).then(L).catch(L);
-		};
+	if (/^\/(help|start)$/i.test(text.trim().replace(/@exhausted_wojak_bot/i, ""))) {
+		ctx.reply(WELCOME_MESSAGE, {
+			disable_web_page_preview: true,
+			parse_mode: "HTML"
+		}).catch(LogMessageOrError);
 	};
 });
 
-TOB.on("inline_query", ({ inlineQuery, answerInlineQuery }) => {
+BOT.on("inline_query", (ctx) => {
 	const
-		userMessage = inlineQuery.query,
+		userMessage = ctx.inlineQuery.query,
 		executed = /^\d+/.exec(userMessage),
 		caption = userMessage.replace(/^(\\|\d+)/, ""),
 		selectedPicture = PICTURES[executed ? (parseInt(executed) - 1 || 0) : 0] || PICTURES[0];
 
-	L(selectedPicture);
-
 	const answer = {
 		type: "photo",
-		id: `exhausted_wojak_${inlineQuery.from.usernname || inlineQuery.from.id}_${Date.now()}`.slice(0, 64),
+		id: `exhausted_wojak_${ctx.inlineQuery.from.username || ctx.inlineQuery.from.id}_${Date.now()}`.slice(0, 64),
 		photo_url: selectedPicture.url,
 		photo_width: selectedPicture.width,
 		photo_height: selectedPicture.height,
@@ -177,9 +117,13 @@ TOB.on("inline_query", ({ inlineQuery, answerInlineQuery }) => {
 		parse_mode: "HTML"
 	};
 
-	L(answer);
+	return ctx.answerInlineQuery([answer]).catch(LogMessageOrError);
+}).catch(LogMessageOrError);
 
-	return answerInlineQuery([answer]).then(L).catch(L);
+BOT.launch();
+
+process.on("unhandledRejection", (reason, p) => {
+	if (DEV) {
+		LogMessageOrError("Unhandled Rejection at: Promise", p, "reason:", reason);
+	};
 });
-
-TOB.launch();

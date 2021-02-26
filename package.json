@@ -1,0 +1,14 @@
+{
+  "name": "exhausted_wojak_bot",
+  "version": "1.0.0",
+  "description": "",
+  "main": "exhausted_wojak_bot.js",
+  "scripts": {
+    "start_bot": "node exhausted_wojak_bot.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "telegraf": "^4.1.1"
+  }
+}
