@@ -1,129 +1,116 @@
-const
-	fs = require("fs"),
-	DEV = require("os").platform() === "win32" || process.argv[2] === "DEV",
-	Telegraf = require("telegraf");
+const { writeFile } = require('fs/promises');
+const { inspect } = require('util');
+const { Telegraf } = require('telegraf');
 
+/** @type {import('./types').TelegramConfig} */
+const TELEGRAM_CONFIG = require('./config/telegram.json');
+
+const { TELEGRAM_BOT_TOKEN, ADMIN_TELEGRAM_ID, PICTURES, BOT_USERNAME, WELCOME_MESSAGE } = TELEGRAM_CONFIG;
+const telegraf = new Telegraf(TELEGRAM_BOT_TOKEN);
+const { telegram } = telegraf;
+
+const IS_DEV = process.env.NODE_ENV === 'development';
+
+const SHORT_DELIMITER = Array.from({ length: 30 }, () => '~').join('');
+const START_DELIMITER = Array.from({ length: 30 }, () => '🔽').join('');
+const END_DELIMITER = Array.from({ length: 30 }, () => '🔼').join('');
 
 /**
- * @typedef {Object} Picture
- * @property {String} url
- * @property {String} thumb
- * @property {Number} width
- * @property {Number} height
- * 
- * @typedef {Object} ConfigFile
- * @property {String} TELEGRAM_BOT_TOKEN
- * @property {{id: number, username: string}} ADMIN_TELEGRAM_DATA
- * @property {Picture[]} PICTURES
- * @property {String} WELCOME_MESSAGE
+ * @param {...any} args
+ * @returns {string}
  */
-/** @type {ConfigFile} */
-const
-	CONFIG = require("./exhausted_wojak_bot.config.json"),
-	{
-		TELEGRAM_BOT_TOKEN,
-		ADMIN_TELEGRAM_DATA,
-		PICTURES,
-		WELCOME_MESSAGE
-	} = CONFIG;
-
-
-
-/** @type {import("telegraf").Telegraf} */
-const BOT = new Telegraf.Telegraf(TELEGRAM_BOT_TOKEN);
-const telegram = BOT.telegram;
-
-
+const WrapForOutput = (...args) =>
+  args.map((arg) => inspect(arg, { depth: Infinity, colors: true })).join(`\n${SHORT_DELIMITER}\n`);
 
 /**
- * @param  {Error[] | String[]} args
+ * @param  {...(string | Error)} args
  * @returns {void}
  */
 const LogMessageOrError = (...args) => {
-	const containsAnyError = (args.findIndex((message) => message instanceof Error) > -1),
-		  out = (containsAnyError ? console.error : console.log);
+  const containsError = args.some(
+    (message) => message instanceof Error || (typeof message === 'string' && /error/i.test(message))
+  );
+  // eslint-disable-next-line no-console
+  const out = containsError ? console.error : console.log;
 
-	out(new Date());
-	args.forEach((message) => out(message));
-	out("~~~~~~~~~~~\n\n");
+  if (containsError) {
+    out(START_DELIMITER);
+    out(new Date());
+    out(WrapForOutput(...args));
+    out(END_DELIMITER);
+  } else out(...args);
 
-
-	if (DEV) fs.writeFile("./out/logmessageorerror.json", JSON.stringify([...args], false, "\t"), () => {});
+  if (IS_DEV) writeFile('./out/logmessageorerror.json', JSON.stringify(args, false, '\t')).catch(out);
 };
+
+if (!IS_DEV) {
+  telegram
+    .sendMessage(ADMIN_TELEGRAM_ID, `Exhausted Wojak Bot spawned at ${new Date().toISOString()}`, {
+      disable_notification: true,
+    })
+    .catch(LogMessageOrError);
+}
 
 /**
- * @param {String} iStr
- * @returns {String}
+ * @param {import('./types').TelegramUser} from
+ * @returns {string}
  */
-const TGE = iStr => {
-	if (!iStr) return "";
-	
-	if (typeof iStr === "string")
-		return iStr
-			.replace(/\&/g, "&amp;")
-			.replace(/\</g, "&lt;")
-			.replace(/\>/g, "&gt;");
-	else
-		return TGE(iStr.toString());
-};
+const UserToString = (from) =>
+  `${from.first_name} ${from.last_name || ''} (lang: ${from.language_code}) (${
+    from.username ? `@${from.username}` : `ID: ${from.id}`
+  })`;
 
-/**
- * @param {String} message
- */
-const TelegramSendToAdmin = (message) => {
-	if (!message) return;
+telegraf
+  .on('message', (ctx) => {
+    const { chat, from, message } = ctx;
 
-	telegram.sendMessage(ADMIN_TELEGRAM_DATA.id, message, {
-		parse_mode: "HTML",
-		disable_notification: true
-	}).catch(LogMessageOrError);
-};
+    if (!('text' in message)) return;
+    const { text } = message;
+    if (!text) return;
 
-if (!DEV)
-	TelegramSendToAdmin(`Exhausted Wojak Bot have been spawned at ${new Date().toISOString()} <i>(ISO 8601, UTC)</i>`);
+    if (chat.type === 'private') LogMessageOrError(`Private chat – ${UserToString(from)}`);
+    else LogMessageOrError('New group', chat.id, chat.title, chat.type);
 
+    if (
+      (chat.type === 'private' && /^\/(help|start)$/i.test(text.trim())) ||
+      /^\/(help|start)@exhausted_wojak_bot$/i.test(text.trim())
+    )
+      ctx
+        .reply(WELCOME_MESSAGE.replace(/\${BOT_USERNAME}/g, BOT_USERNAME), {
+          disable_web_page_preview: true,
+          parse_mode: 'HTML',
+        })
+        .catch(LogMessageOrError);
+  })
+  .catch(LogMessageOrError);
 
+telegraf
+  .on('inline_query', (ctx) => {
+    const userCaption = ctx.inlineQuery.query || undefined;
 
-BOT.on("text", (ctx) => {
-	const text = ctx?.message?.text;
-	if (!text) return false;
+    LogMessageOrError(`Inline query – ${UserToString(ctx.from)}`);
 
-	if (ctx?.chat?.type !== "private" && text.indexOf("@exhausted_wojak_bot") < 0) return;
+    const results = PICTURES.map(
+      /** @returns {import('./types').TelegramInlineQueryResult} */ (picture, pictureIndex) => ({
+        type: 'photo',
+        id: `ewb${pictureIndex}${Date.now()}`.slice(0, 64),
+        photo_url: picture.url,
+        photo_width: picture.width,
+        photo_height: picture.height,
+        thumb_url: picture.thumb,
+        title: userCaption,
+        caption: userCaption,
+      })
+    );
 
-	if (/^\/(help|start)$/i.test(text.trim().replace(/@exhausted_wojak_bot/i, ""))) {
-		ctx.reply(WELCOME_MESSAGE, {
-			disable_web_page_preview: true,
-			parse_mode: "HTML"
-		}).catch(LogMessageOrError);
-	};
-});
+    return ctx.answerInlineQuery(results).catch(LogMessageOrError);
+  })
+  .catch(LogMessageOrError);
 
-BOT.on("inline_query", (ctx) => {
-	const
-		userMessage = ctx.inlineQuery.query,
-		executed = /^\d+/.exec(userMessage),
-		caption = userMessage.replace(/^(\\|\d+)/, ""),
-		selectedPicture = PICTURES[executed ? (parseInt(executed) - 1 || 0) : 0] || PICTURES[0];
+telegraf.launch();
 
-	const answer = {
-		type: "photo",
-		id: `exhausted_wojak_${ctx.inlineQuery.from.username || ctx.inlineQuery.from.id}_${Date.now()}`.slice(0, 64),
-		photo_url: selectedPicture.url,
-		photo_width: selectedPicture.width,
-		photo_height: selectedPicture.height,
-		thumb_url: selectedPicture.thumb,
-		title: TGE(caption),
-		caption: TGE(caption),
-		parse_mode: "HTML"
-	};
-
-	return ctx.answerInlineQuery([answer]).catch(LogMessageOrError);
-}).catch(LogMessageOrError);
-
-BOT.launch();
-
-process.on("unhandledRejection", (reason, p) => {
-	if (DEV) {
-		LogMessageOrError("Unhandled Rejection at: Promise", p, "reason:", reason);
-	};
-});
+process.on('unhandledRejection', (reason, promise) =>
+  LogMessageOrError('Unhandled Rejection at: Promise', promise, 'reason:', reason)
+);
+process.once('SIGINT', () => telegraf.stop('SIGINT'));
+process.once('SIGTERM', () => telegraf.stop('SIGTERM'));

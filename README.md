@@ -1,16 +1,34 @@
 # Exhausted-Wojak-Bot
+
 Inline Telegram bot. Sends picture of exhausted wojak (or anything else) with your message.
 
-### Example
-[Actual working Telegram bot](https://t.me/exhausted_wojak_bot).
+### Config
 
-### Structure
-+ `config.json` file with configs: token from [@BotFather](https://t.me/BotFather), urls for picture being sent, and admin's data.
-+ `.js` file, which should be started just like `node exhausted_wojak_bot.js`.
+You need to edit [`config/telegram.json`](./config/telegram.json) file to include the following:
 
-##### Used modules
-+ `telegraf` – can be installed via npm or yarn or whatever. [API ref](https://telegraf.js.org/)
+-   Token from [@BotFather](https://t.me/BotFather)
+-   URLs of pictures being sent
+    -   `url` for full image
+    -   `thumb` for small-size preview
+    -   `width` and `height` – sizes of full image, can be omitted
+-   Admin's user ID - for sending notifications
+-   Bot's username - for proper help command
+-   Text for `/help` command
 
-___
+### How to run
 
-Contact me [@serguun42](https://t.me/serguun42) if you have any questions or so.
+1. Install necessary dependencies – `npm i --production`
+2. Run bot – `npm run production`
+
+### How to use
+
+Instuction are given in `WELCOME_MESSAGE` property in configuration file, bot's username is being injected into default template.
+
+### Some links
+
+-   [Telegraf Module for Node.js](https://telegraf.js.org/)
+-   [Telegram Bots API](https://core.telegram.org/bots/api)
+
+---
+
+### [BSL-1.0 License](./LICENSE)

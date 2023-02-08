@@ -1,0 +1,13 @@
+{
+	"apps": [{
+		"name"				: "exhausted_wojak_bot",
+		"script"			: "./exhausted_wojak_bot.js",
+		"watch"				: false,
+		"append"			: true,
+		"sourceDir"			: "./",
+		"log_date_format"	: "YYYY-MM-DD HH:mm:ss Z",
+		"env"				: {
+			"NODE_ENV": "production"
+		}
+	}]
+}
